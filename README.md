@@ -26,7 +26,6 @@ Déploiement d'une architecture multi-services orchestrant simultanément une ba
 ├── .gitignore
 └── README.md
 
-
 ---
 
 ## INSTRUCTION DE LANCEMENT
