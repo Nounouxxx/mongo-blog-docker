@@ -1,10 +1,10 @@
-# 🐳 Architecture Multi-Services Docker
+# Architecture Multi-Services Docker
 
 Déploiement d'une architecture multi-services orchestrant simultanément une base de données SQL (MySQL) et NoSQL (MongoDB) de manière orchestrée et résiliente.
 
-## 📦 Docker Hub
+## Docker Hub
 
-## 📁 Structure du projet
+## Structure du projet
 
 .
 ├── mongo/                        # Service MongoDB personnalisé
@@ -53,7 +53,7 @@ docker compose -f docker-compose.yml up --detach --build
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 | Service | Image | Port | Rôle |
 |---|---|---|---|
@@ -65,7 +65,7 @@ docker compose -f docker-compose.yml up --detach --build
 
 ---
 
-## 🔗 Interfaces disponibles
+## Interfaces disponibles
 
 | Interface | URL |
 |---|---|
