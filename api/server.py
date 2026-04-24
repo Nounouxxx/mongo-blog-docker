@@ -2,6 +2,7 @@ import mysql.connector
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
 
 app = FastAPI()
 origins = ["*"]
@@ -14,8 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
+# --- Route MySQL ---
 @app.get("/users")
 async def get_users():
     conn = mysql.connector.connect(
@@ -23,13 +23,24 @@ async def get_users():
         user=os.getenv("MYSQL_USER"),
         password=os.getenv("MYSQL_ROOT_PASSWORD"),
         port=3306,
-        host=os.getenv("MYSQL_HOST"))
+        host=os.getenv("MYSQL_HOST")
+    )
     cursor = conn.cursor()
-    sql_select_Query = "SELECT * FROM utilisateur"
-    
-    cursor.execute(sql_select_Query)
-    # get all records
+    cursor.execute("SELECT * FROM utilisateur")
     records = cursor.fetchall()
-    print("Total number of rows in table: ", cursor.rowcount)
-    # Renvoyer nos données en 200 code OK
+    conn.close()
     return {"users": records}
+
+# --- Route MongoDB ---
+@app.get("/posts")
+async def get_posts():
+    client = MongoClient(
+        host=os.getenv("MONGO_HOST"),
+        port=27017,
+        username=os.getenv("MONGO_USER"),
+        password=os.getenv("MONGO_PASSWORD")
+    )
+    db = client["blog_db"]
+    posts = list(db.posts.find({}, {"_id": 0}))
+    client.close()
+    return {"posts": posts}

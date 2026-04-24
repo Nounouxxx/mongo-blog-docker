@@ -1,59 +1,134 @@
 services:
 
-  # Service MySQL avec migration SQL
-  db:
-    image: "mysql:8.0"
-    container_name: mysql-db
+  # --- Base de données MongoDB ---
+  db_mongo:
+    build:
+      context: ./mongo
+      dockerfile: Dockerfile
+    container_name: db_mongo
     environment:
-      - MYSQL_ROOT_PASSWORD
-    ports:
-      - "3307:3306"
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE}
     volumes:
-      - ./sql/scripts:/docker-entrypoint-initdb.d
-    restart: unless-stopped
+      - mongo_data:/data/db
+      - ./mongo/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - db_network
+      - app_network
+    restart: on-failure
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: >
+        mongosh --username ${MONGO_INITDB_ROOT_USERNAME}
+        --password ${MONGO_INITDB_ROOT_PASSWORD}
+        --authenticationDatabase admin --quiet
+        --eval "
+          const count = db.getSiblingDB('blog_db').posts.countDocuments();
+          if (count !== 5) { print('FAIL'); quit(1); }
+          print('OK');
+        "
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
-  # Service Adminer — interface web pour gérer la DB
-  adminer:
-    image: adminer
-    container_name: adminer
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
-    restart: unless-stopped
+  # --- Base de données MySQL ---
+  db_mysql:
+    image: "mysql:8.0"
+    container_name: db_mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/scripts:/docker-entrypoint-initdb.d
+    networks:
+      - db_network
+    restart: on-failure
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080"]
+      test: >
+        mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} &&
+        mysql -u root -p${MYSQL_ROOT_PASSWORD} -e
+        "SELECT COUNT(*) FROM ynov_ci.utilisateur HAVING COUNT(*) = 5;" ynov_ci
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
 
-  # Service API FastAPI
+  # --- Interface web MongoDB ---
+  admin_mongo:
+    image: mongo-express
+    container_name: admin_mongo
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=${ME_CONFIG_MONGODB_ADMINUSERNAME}
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${ME_CONFIG_MONGODB_ADMINPASSWORD}
+      - ME_CONFIG_MONGODB_URL=${ME_CONFIG_MONGODB_URL}
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin1234
+    ports:
+      - "8081:8081"
+    networks:
+      - db_network
+      - app_network
+    depends_on:
+      db_mongo:
+        condition: service_healthy
+    restart: on-failure
+
+  # --- Interface web MySQL ---
+  admin_mysql:
+    image: adminer
+    container_name: admin_mysql
+    ports:
+      - "8080:8080"
+    networks:
+      - db_network
+      - app_network
+    depends_on:
+      db_mysql:
+        condition: service_healthy
+    restart: on-failure
+
+  # --- API FastAPI ---
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
     container_name: fastapi
     environment:
-      - MYSQL_HOST=db
-      - MYSQL_DATABASE=ynov_ci
-      - MYSQL_USER=root
+      - MYSQL_HOST=db_mysql
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MONGO_HOST=db_mongo
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASSWORD=${MONGO_PASSWORD}
     ports:
       - "8000:8000"
+    networks:
+      - db_network
+      - app_network
     depends_on:
-      db:
+      db_mongo:
         condition: service_healthy
-    restart: unless-stopped
+      db_mysql:
+        condition: service_healthy
+    restart: on-failure
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/users')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/users'); urllib.request.urlopen('http://localhost:8000/posts')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 40s
+
+# --- Volumes nommés pour la persistance ---
+volumes:
+  mongo_data:
+  mysql_data:
+
+# --- Réseaux ---
+networks:
+  db_network:
+    internal: true    # isolé de l'extérieur
+  app_network:
+    internal: false   # accessible depuis l'hôte
