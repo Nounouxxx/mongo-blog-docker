@@ -1,0 +1,27 @@
+# Variables d'environnement — ne jamais inclure dans les images
+.env
+
+# Dossier MongoDB — inutile pour les images SQL et API
+mongo/
+
+# Captures d'écran
+Screen Shots/
+
+# Git
+.git
+.gitignore
+
+# VSCode
+.vscode/
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Docker
+docker-compose.yml

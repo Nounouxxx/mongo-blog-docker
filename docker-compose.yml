@@ -1,0 +1,59 @@
+services:
+
+  # Service MySQL avec migration SQL
+  db:
+    image: "mysql:8.0"
+    container_name: mysql-db
+    environment:
+      - MYSQL_ROOT_PASSWORD
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./sql/scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Service Adminer — interface web pour gérer la DB
+  adminer:
+    image: adminer
+    container_name: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Service API FastAPI
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: fastapi
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=ynov_ci
+      - MYSQL_USER=root
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/users')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
