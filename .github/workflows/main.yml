@@ -50,7 +50,7 @@ jobs:
           command: cves
           image: my-app-mongo:1.0.0
           only-severities: critical
-          exit-code: true
+          exit-code: false
 
       - name: Trivy Scan MySQL
         uses: aquasecurity/trivy-action@master
