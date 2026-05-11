@@ -31,11 +31,24 @@ jobs:
           cd api
           docker build -t my-app:1.0.0 -f ./Dockerfile .
 
+      - name: Build image Mongo
+        run: |
+          cd mongo
+          docker build -t my-app-mongo:1.0.0 -f ./Dockerfile .
+
       - name: Docker Scout Scan API
         uses: docker/scout-action@v1
         with:
           command: cves
           image: my-app:1.0.0
+          only-severities: critical
+          exit-code: true
+
+      - name: Docker Scout Scan Mongo
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: my-app-mongo:1.0.0
           only-severities: critical
           exit-code: true
 
