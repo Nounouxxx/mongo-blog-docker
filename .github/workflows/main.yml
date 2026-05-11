@@ -148,4 +148,12 @@ jobs:
           context: ./api
           file: ./api/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/mongo-blog:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/mongo-blog-api:latest
+
+      - name: Build and push Mongo image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./mongo
+          file: ./mongo/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/mongo-blog-mongo:latest
