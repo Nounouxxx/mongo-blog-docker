@@ -1,0 +1,47 @@
+name: CI/CD Pipeline - Stack Hybride
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+
+  # ============================================================
+  # JOB 1 : Build & Scan de sécurité
+  # ============================================================
+  build_and_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image API
+        run: |
+          cd api
+          docker build -t my-app:1.0.0 -f ./Dockerfile .
+
+      - name: Docker Scout Scan API
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: my-app:1.0.0
+          only-severities: critical
+          exit-code: true
+
+      - name: Trivy Scan MySQL
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: mysql:8.0
+          severity: CRITICAL,HIGH
+          exit-code: 0
