@@ -45,3 +45,4 @@ jobs:
           image: my-app-mongo:1.0.0
           only-severities: critical,high
           exit-code: true
+          
