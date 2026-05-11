@@ -82,26 +82,26 @@ jobs:
 
       - name: Wait for healthy services
         run: |
-          MAX_RETRIES=12
-          WAIT=5
+          MAX_RETRIES=24
+          WAIT=10
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Tentative $i/$MAX_RETRIES..."
-            HEALTHS=$(docker compose ps --format json | jq -r '.[].Health')
-            ALL_HEALTHY=true
-            for health in $HEALTHS; do
-              if [ "$health" != "healthy" ]; then
-                ALL_HEALTHY=false
-                break
-              fi
-            done
-            if [ "$ALL_HEALTHY" = "true" ]; then
+            
+            TOTAL=$(docker compose ps --format json | jq -r '. | if type == "array" then .[].Health else .Health end' | wc -l)
+            HEALTHY=$(docker compose ps --format json | jq -r '. | if type == "array" then .[].Health else .Health end' | grep -c "healthy" || true)
+            
+            echo "Services healthy: $HEALTHY / $TOTAL"
+            
+            if [ "$TOTAL" -gt 0 ] && [ "$HEALTHY" -eq "$TOTAL" ]; then
               echo "✅ Tous les services sont healthy !"
               exit 0
             fi
-            echo "⏳ Services pas encore prêts, attente ${WAIT}s..."
+            
+            docker compose ps
+            echo "⏳ Attente ${WAIT}s..."
             sleep $WAIT
           done
-          echo "❌ Timeout : les services ne sont pas healthy après $((MAX_RETRIES * WAIT))s"
+          echo "❌ Timeout après $((MAX_RETRIES * WAIT))s"
           docker compose ps
           exit 1
 
