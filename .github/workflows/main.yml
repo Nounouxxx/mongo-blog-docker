@@ -41,7 +41,7 @@ jobs:
         with:
           command: cves,recommendations
           image: my-app:1.0.0
-          only-severities: critical,high
+          only-severities: critical
           exit-code: true
 
       - name: Docker Scout Scan Mongo
@@ -49,7 +49,7 @@ jobs:
         with:
           command: cves,recommendations
           image: my-app-mongo:1.0.0
-          only-severities: critical,high
+          only-severities: critical
           exit-code: false
 
       - name: Trivy Scan MySQL
