@@ -39,17 +39,17 @@ jobs:
       - name: Docker Scout Scan API
         uses: docker/scout-action@v1
         with:
-          command: cves
+          command: cves,recommendations
           image: my-app:1.0.0
-          only-severities: critical
+          only-severities: critical,high
           exit-code: true
 
       - name: Docker Scout Scan Mongo
         uses: docker/scout-action@v1
         with:
-          command: cves
+          command: cves,recommendations
           image: my-app-mongo:1.0.0
-          only-severities: critical
+          only-severities: critical,high
           exit-code: false
 
       - name: Trivy Scan MySQL
