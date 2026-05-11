@@ -1,0 +1,151 @@
+name: CI/CD Pipeline - Stack Hybride
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+
+  # ============================================================
+  # JOB 1 : Build & Scan de sécurité
+  # ============================================================
+  build_and_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image API
+        run: |
+          cd api
+          docker build -t my-app:1.0.0 -f ./Dockerfile .
+
+      - name: Docker Scout Scan API
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: my-app:1.0.0
+          only-severities: critical
+          exit-code: true
+
+      - name: Trivy Scan MySQL
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: mysql:8.0
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+ # ============================================================
+  # JOB 2 : Tests d'intégration
+  # ============================================================
+  integration_tests:
+    runs-on: ubuntu-latest
+    needs: build_and_scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate .env file
+        run: |
+          cat <<EOF > .env
+          MONGO_INITDB_ROOT_USERNAME=admin
+          MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+          MONGO_INITDB_DATABASE=blog_db
+          MONGO_HOST=db_mongo
+          MONGO_USER=admin
+          MONGO_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE=ynov_ci
+          MYSQL_USER=root
+          MYSQL_HOST=db_mysql
+          ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+          ME_CONFIG_MONGODB_ADMINPASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+          ME_CONFIG_MONGODB_URL=mongodb://admin:${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}@db_mongo:27017/
+          ME_CONFIG_BASICAUTH_USERNAME=admin
+          ME_CONFIG_BASICAUTH_PASSWORD=admin1234
+          CONTAINER_NAME=db_mongo
+          EOF
+
+      - name: Deploy stack
+        run: docker compose -f docker-compose.yml up --detach --build
+
+      - name: Wait for healthy services
+        run: |
+          MAX_RETRIES=24
+          WAIT=10
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Tentative $i/$MAX_RETRIES..."
+            
+            TOTAL=$(docker compose ps --format json | jq -r '. | if type == "array" then .[].Health else .Health end' | wc -l)
+            HEALTHY=$(docker compose ps --format json | jq -r '. | if type == "array" then .[].Health else .Health end' | grep -c "healthy" || true)
+            
+            echo "Services healthy: $HEALTHY / $TOTAL"
+            
+            if [ "$TOTAL" -gt 0 ] && [ "$HEALTHY" -eq "$TOTAL" ]; then
+              echo "✅ Tous les services sont healthy !"
+              exit 0
+            fi
+            
+            docker compose ps
+            echo "⏳ Attente ${WAIT}s..."
+            sleep $WAIT
+          done
+          echo "❌ Timeout après $((MAX_RETRIES * WAIT))s"
+          docker compose ps
+          exit 1
+
+      - name: Test route /users
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/users)
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ /users a retourné $STATUS"
+            exit 1
+          fi
+          echo "✅ /users retourne 200"
+
+      - name: Test route /posts
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/posts)
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ /posts a retourné $STATUS"
+            exit 1
+          fi
+          echo "✅ /posts retourne 200"
+
+          # ============================================================
+  # JOB 3 : Publication sur Docker Hub
+  # ============================================================
+  push_to_registry:
+    runs-on: ubuntu-latest
+    needs: integration_tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          file: ./api/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/mongo-blog:latest
