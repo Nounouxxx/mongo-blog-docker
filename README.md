@@ -154,3 +154,52 @@ docker compose -f docker-compose.yml down
 # Stopper et supprimer les volumes
 docker compose -f docker-compose.yml down -v
 ```
+
+---
+
+## 🔄 Pipeline CI/CD
+
+Le projet dispose de deux pipelines GitHub Actions.
+
+### `build_test.yml` — Build & Scan basique
+Déclenché à chaque push sur `main`.
+
+| Step | Description |
+|---|---|
+| Build image API | Construit l'image FastAPI |
+| Build image Mongo | Construit l'image MongoDB personnalisée |
+| Docker Scout (API) | Scan CVE critical + high (sans bloquer) |
+| Docker Scout (Mongo) | Scan CVE critical + high (sans bloquer) |
+
+### `main.yml` — Pipeline CI/CD complet
+Déclenché à chaque push sur `main`.
+
+#### Job 1 — Build & Scan
+| Step | Description |
+|---|---|
+| Build image API | Construit l'image FastAPI |
+| Docker Scout | Bloque si vulnérabilité **critical** détectée |
+| Trivy | Scan de `mysql:8.0` — affiche sans bloquer |
+
+#### Job 2 — Tests d'intégration
+| Step | Description |
+|---|---|
+| Génération `.env` | Créé à la volée depuis les secrets GitHub |
+| Deploy stack | Lance `docker compose up` |
+| Script de santé | Attend que les 5 services soient `healthy` (24 tentatives x 10s) |
+| Test `/users` | Vérifie que la route MySQL retourne 200 |
+| Test `/posts` | Vérifie que la route MongoDB retourne 200 |
+
+#### Job 3 — Publication
+| Step | Description |
+|---|---|
+| Push Docker Hub | Publie `marcreimen/mongo-blog:latest` uniquement si Job 2 réussit |
+
+### Secrets requis
+
+| Secret | Description |
+|---|---|
+| `DOCKER_USERNAME` | Nom d'utilisateur Docker Hub |
+| `DOCKER_TOKEN` | Access Token Docker Hub |
+| `MONGO_INITDB_ROOT_PASSWORD` | Mot de passe MongoDB |
+| `MYSQL_ROOT_PASSWORD` | Mot de passe MySQL |
